@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+set -euo pipefail
+# This bus was created by dbus-run-session. Do not add --systemd here.
+dbus-update-activation-environment WAYLAND_DISPLAY SWAYSOCK XDG_CURRENT_DESKTOP XDG_DATA_HOME PATH FONTCONFIG_FILE
+python3 - <<'PY'
+import json, os
+from pathlib import Path
+names = ('WAYLAND_DISPLAY', 'SWAYSOCK', 'DBUS_SESSION_BUS_ADDRESS', 'PATH', 'XDG_DATA_HOME', 'FONTCONFIG_FILE')
+(Path(os.environ['XDG_RUNTIME_DIR']) / 'session.json').write_text(json.dumps({name: os.environ.get(name, '') for name in names}))
+PY
+moarchy-one-app-per-workspace &
+if command -v moarchy-keyboard >/dev/null; then moarchy-keyboard & fi
+quickshell -n -p "$OMARCHY_PATH/shell" &
+shell_pid=$!
+for ((attempt=0; attempt<80; attempt++)); do
+  if [[ $(omarchy-shell shell ping 2>/dev/null) == ok ]]; then
+    bar_report=$(omarchy-shell bar metrics 2>/dev/null || true)
+    drawer_state=$(omarchy-shell drawer state 2>/dev/null || true)
+    if [[ $bar_report == *'"hostStatus":false'* && ( $drawer_state == open || $drawer_state == closed ) ]]; then
+      omarchy-shell drawer open
+      touch "$XDG_RUNTIME_DIR/desktop-ready"
+      break
+    fi
+  fi
+  if ! kill -0 "$shell_pid" 2>/dev/null; then wait "$shell_pid"; exit 1; fi
+  sleep 0.1
+done
+wait "$shell_pid"

@@ -1,0 +1,23 @@
+--- a/src/panel.cpp
++++ b/src/panel.cpp
+@@ -219,7 +219,6 @@ bool Panel::prepare(QString *error)
+     // kDefaultStripInset.
+     const int surfaceHeight = m_panelHeight + m_stripInset;
+     layerShell->setMargins(QMargins(0, 0, 0, m_bottomMargin - m_stripInset));
+-    layerShell->setDesiredSize(QSize(width, surfaceHeight));
+ 
+    m_view->resize(width, surfaceHeight);
+    return true;
+--- a/src/layoutstore.cpp
++++ b/src/layoutstore.cpp
+@@ -13,8 +13,10 @@ LayoutStore::LayoutStore(QObject *parent)
+     : QObject(parent)
+ {
+     m_searchPaths = {
++        QString::fromLocal8Bit(qgetenv("MOARCHY_KEYBOARD_DATA_DIR"))
++            + QStringLiteral("/moarchy-keyboard/layouts"),
+         QStandardPaths::writableLocation(QStandardPaths::ConfigLocation)
+             + QStringLiteral("/moarchy-keyboard/layouts"),
+         QStringLiteral(MOARCHY_DATADIR "/moarchy-keyboard/layouts"),
+         QStringLiteral(":/layouts"),
+     };

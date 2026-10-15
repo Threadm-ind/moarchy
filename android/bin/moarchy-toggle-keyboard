@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+set -euo pipefail
+value=$(busctl --user get-property sm.puri.OSK0 /sm/puri/OSK0 sm.puri.OSK0 Visible)
+if [[ $value == 'b true' ]]; then visible=false; else visible=true; fi
+exec busctl --user call sm.puri.OSK0 /sm/puri/OSK0 sm.puri.OSK0 SetVisible b "$visible"

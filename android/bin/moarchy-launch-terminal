@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+set -euo pipefail
+exec foot -c "$MOARCHY_ANDROID_ROOT/profile/foot.ini" "$@"

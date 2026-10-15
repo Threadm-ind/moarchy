@@ -1,0 +1,66 @@
+#!/usr/bin/env python3
+"""Apply a bundled theme only to this Moarchy profile and compositor."""
+import base64
+import fcntl
+import os
+from pathlib import Path
+import re
+import shutil
+import subprocess
+import sys
+
+
+def main():
+    if len(sys.argv) != 2:
+        raise SystemExit("Usage: omarchy-theme-set 'Theme Name'")
+    slug = sys.argv[1].lower().replace(" ", "-")
+    if not re.fullmatch(r"[a-z0-9][a-z0-9-]*", slug):
+        raise SystemExit("Invalid theme name")
+    root = Path(os.environ["MOARCHY_ANDROID_ROOT"])
+    omarchy = Path(os.environ["OMARCHY_PATH"])
+    source = omarchy / "themes" / slug
+    if not (source / "colors.toml").is_file():
+        raise SystemExit(f"Bundled theme is unavailable: {slug}")
+    current = root / "profile/state/current"
+    current.mkdir(parents=True, exist_ok=True)
+    with (current / "theme.lock").open("a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        stage = current / "next-theme"
+        if stage.exists():
+            shutil.rmtree(stage)
+        shutil.copytree(source, stage)
+        subprocess.run([str(omarchy / "bin/omarchy-theme-set-templates")], check=True)
+        previous = current / "previous-theme"
+        if previous.exists():
+            shutil.rmtree(previous)
+        active = current / "theme"
+        if active.exists():
+            active.rename(previous)
+        try:
+            stage.rename(active)
+        except OSError:
+            if previous.exists():
+                previous.rename(active)
+            raise
+        (current / "theme.name").write_text(slug + "\n")
+        pictures = sorted((active / "backgrounds").glob("*"))
+        background = current / "background"
+        if pictures:
+            temporary = current / "background.new"
+            temporary.unlink(missing_ok=True)
+            temporary.symlink_to(pictures[0])
+            temporary.replace(background)
+        if os.environ.get("SWAYSOCK") and Path(os.environ["SWAYSOCK"]).exists():
+            subprocess.run(["swaymsg", "reload"], check=True)
+            if pictures:
+                subprocess.run(["swaymsg", 'output * bg "' + str(background) + '" fill'], check=True)
+        if os.environ.get("WAYLAND_DISPLAY"):
+            def encoded(name):
+                p = active / name
+                return base64.b64encode(p.read_bytes() if p.is_file() else b"").decode()
+            subprocess.run([str(omarchy / "bin/omarchy-shell"), "-q", "shell", "applyTheme",
+                            encoded("colors.toml"), encoded("shell.toml")], check=False)
+
+
+if __name__ == "__main__":
+    main()
