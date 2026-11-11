@@ -12,7 +12,8 @@ The new source is local and uncommitted; it is not yet available from the public
 fork. There is no Android APK or Pixel boot image.
 
 The phone screenshot supplied on 2026-09-07 establishes a working Debian 13.6
-shell, `aarch64`, and `/usr/local/bin/enable_display` on Alex's Android 17 Pixel 10.
+shell, `aarch64`, and `/usr/local/bin/enable_display` on Alex's Pixel 10, which
+runs GrapheneOS on Android 17 (Alex, 2026-11-11).
 Phone installation, display, input and lifecycle tests remain outstanding.
 
 The first phone download was blocked by the computer's UFW firewall; a temporary
@@ -104,6 +105,9 @@ dual-boot installer.
 - [Android 17 release-tag Terminal documentation](https://android.googlesource.com/platform/packages/modules/Virtualization/+/refs/tags/android-17.0.0_r1/docs/custom_vm.md): the GUI entry is the Display button. Hardware acceleration has a settings option on supported devices. Replacing the existing Weston desktop is documented as experimental; do not automatically edit Google's display helpers.
 - [Debian Sway package](https://packages.debian.org/trixie/sway): version `1.10.1-2` is published for ARM64 in Debian 13.
 - [Debian ARM64 backports index](https://deb.debian.org/debian/dists/trixie-backports/main/binary-arm64/Packages.xz): a direct index check found `quickshell` version `0.3.0-1~bpo13+1` for ARM64, requiring Qt 6.8.2 private ABI packages. This proves package availability, not compatibility with Moarchy's complete QML shell. Evidence: `/tmp/moarchy-android-package-evidence/quickshell-arm64.json`.
+- [Debian scrcpy backport](https://packages.debian.org/trixie-backports/scrcpy): `3.3.4-1~bpo13+1` in `contrib` for ARM64; [its server fetcher](https://sources.debian.org/src/scrcpy/3.3.4-1~bpo13+1/debian/scrcpy-update-server) pins the upstream server checksum. Debian `adb` is `1:34.0.5-12` in trixie main.
+- [scrcpy 3.3.4 virtual displays](https://github.com/Genymobile/scrcpy/blob/v3.3.4/doc/virtual_display.md) and [its app-list format](https://github.com/Genymobile/scrcpy/blob/v3.3.4/server/src/main/java/com/genymobile/scrcpy/util/LogUtils.java): the parser follows that 30-column layout, and an explicit display size without DPI makes scrcpy scale the main display's density.
+- [GrapheneOS features](https://grapheneos.org/features#network-permission-toggle): the Network permission also guards localhost, and [auto reboot](https://grapheneos.org/features#auto-reboot) defaults to 18 locked hours. [Developer options are Owner-only and device-wide](https://discuss.grapheneos.org/d/4231-developer-settings-and-usb-debugging-on-user-profiles/2); [scrcpy reaches only the Owner profile](https://github.com/Genymobile/scrcpy/issues/6201).
 - [PRoot-Distro limitations](https://github.com/termux/proot-distro/blob/master/README.md)
 - [Termux:X11](https://github.com/termux/termux-x11)
 
@@ -129,6 +133,23 @@ One transient user service owns the desktop, its private D-Bus session and its
 children. Starting requires a working user service manager and the explicit
 parent Wayland socket. Readiness requires both a responding compositor and the
 loaded mobile shell. Stop targets that service; it never kills Quickshell by name.
+
+Android apps stay on Android. `moarchy-android-apps` adds one launcher entry per
+launchable app reported by `scrcpy --list-apps` and opens each app on its own
+Android virtual display with `scrcpy --new-display=WxH --start-app=PACKAGE`,
+sized to the focused Sway workspace. The guest reaches the phone's adbd over
+Wireless debugging after a one-time `adb pair`. Generated entries use the
+`moarchy-android-app-` prefix in the session's data directory; a sync removes
+only stale entries with that prefix and changes nothing when the listing fails.
+Setup adds Debian `adb`, `libnotify-bin`, `curl` and `scrcpy` `3.3.4-1~bpo13+1`
+from trixie-backports `contrib`. That package's postinst downloads the upstream
+`scrcpy-server` and verifies its pinned SHA-256.
+
+Unverified on the phone: whether the VM can reach adbd at the phone's Wi-Fi
+address through Terminal's network, touch and keyboard input in the scrcpy
+window, video latency with software rendering, and how Android 17 shows an
+already-running app or the IME on a virtual display. Android notifications do
+not reach the desktop shade yet.
 
 ## Guest checker
 

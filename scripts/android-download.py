@@ -15,11 +15,11 @@ import urllib.parse
 import urllib.request
 
 
-ARTIFACT_NAME = "moarchy-android-2e19361818cc.tar.gz"
+ARTIFACT_NAME = "moarchy-android-474130c2f0b4.tar.gz"
 ARCHIVE_ROOT = "moarchy-android"
 SETUP_RELATIVE_PATH = Path("moarchy-android/android/setup.sh")
-EXPECTED_BYTES = 125_538_031
-EXPECTED_SHA256 = "1001a18880e81485b4c96bf2e4c781dcf05768989fe38a3653fd6739c4c17fa8"
+EXPECTED_BYTES = 125_542_257
+EXPECTED_SHA256 = "35f97e116111868b2634d14681c0600c9b101e7571cc5d728423e2b4d329bdaa"
 MIN_FREE_BYTES = 4 * 1024**3
 MAX_MEMBERS = 1_000
 MAX_UNPACKED_BYTES = 256 * 1024**2

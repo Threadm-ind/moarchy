@@ -27,7 +27,7 @@ source_file=/etc/apt/sources.list.d/moarchy-backports.sources
 source_text='Types: deb
 URIs: https://deb.debian.org/debian
 Suites: trixie-backports
-Components: main
+Components: main contrib
 Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg'
 if [[ -e $source_file || -L $source_file ]]; then
   if [[ -L $source_file || $(cat "$source_file") != "$source_text" ]]; then
@@ -40,10 +40,12 @@ fi
 sudo apt-get update
 packages=(sway swaybg foot dbus dbus-x11 inotify-tools jq procps wayland-utils grim
   libgtk-3-bin fonts-noto-color-emoji adwaita-icon-theme ca-certificates python3 xz-utils
-  firefox-esr nautilus gnome-text-editor
+  firefox-esr nautilus gnome-text-editor adb curl libnotify-bin
   qml6-module-qtquick-templates qml6-module-qtqml-workerscript
   build-essential cmake ninja-build pkgconf patch qt6-base-dev qt6-declarative-dev
   qt6-wayland-dev liblayershellqtinterface-dev libwayland-dev libxkbcommon-dev)
 for package in "${packages[@]}"; do apt-cache show "$package" >/dev/null; done
-sudo apt-get install -y "${packages[@]}" quickshell=0.3.0-1~bpo13+1
+# scrcpy is contrib because its postinst fetches the pinned, checksummed
+# scrcpy-server from upstream; curl above is what it downloads with.
+sudo apt-get install -y "${packages[@]}" quickshell=0.3.0-1~bpo13+1 scrcpy=3.3.4-1~bpo13+1
 printf 'Debian packages prepared. Continue with: python3 %q %q\n' "$android_dir/install.py" "$(dirname -- "$android_dir")"

@@ -1,0 +1,191 @@
+#!/usr/bin/env python3
+"""Android apps as Moarchy apps: each one opens in its own scrcpy window.
+
+Android stays the host; this session reaches it over Wireless debugging. Pair
+once with `adb pair HOST:PORT CODE` (Settings > Developer options > Wireless
+debugging > Pair device with pairing code), then:
+
+  moarchy-android-apps connect HOST:PORT   remember the phone, fill the launcher
+  moarchy-android-apps sync                refresh the launcher entries
+  moarchy-android-apps launch PACKAGE      open one app on its own virtual display
+
+Launches pass --no-audio (sound stays on the phone) and
+--display-ime-policy=local (the Android keyboard opens inside the window). A
+non-empty $XDG_CONFIG_HOME/moarchy-android/scrcpy-args replaces both.
+"""
+
+import json
+import os
+from pathlib import Path
+import re
+import shlex
+import subprocess
+import sys
+
+PREFIX = "moarchy-android-app-"
+DEFAULT_ARGS = ["--no-audio", "--display-ime-policy=local"]
+PACKAGE = re.compile(r"[A-Za-z]\w*(?:\.[A-Za-z]\w*)+", re.ASCII)
+ENDPOINT = re.compile(r"\S+:\d{1,5}")
+APP = re.compile(r" [*-] (.+)")
+# scrcpy pads labels to 30 columns; a longer label puts its package on the
+# next line behind 34 spaces.
+CONTINUATION = " " * 34
+# The Terminal app hosts this session; opening it inside itself only recurses.
+SKIPPED = ".virtualization.terminal"
+HINT = "Open Wireless debugging on the phone, then run: moarchy-android-apps connect HOST:PORT"
+
+
+class Failure(Exception):
+    pass
+
+
+def run(*command, timeout=30):
+    try:
+        return subprocess.run(command, capture_output=True, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        raise Failure(f"{command[0]} timed out") from None
+    except FileNotFoundError:
+        raise Failure(f"{command[0]} is missing; rerun the Android setup") from None
+
+
+def path(variable, *parts):
+    if variable not in os.environ:
+        raise Failure("run this inside the Moarchy session")
+    return Path(os.environ[variable], *parts)
+
+
+def device(endpoint=None):
+    """adb/scrcpy device arguments, reconnecting the remembered endpoint."""
+    if endpoint is None:
+        state = path("XDG_STATE_HOME", "moarchy-android", "endpoint")
+        endpoint = state.read_text().strip() if state.is_file() else ""
+    args = ["-s", endpoint] if endpoint else []
+    message = "Android is not connected."
+    if endpoint:
+        connected = run("adb", "connect", endpoint)
+        message += " " + (connected.stdout + connected.stderr).strip()
+    if run("adb", *args, "get-state").stdout.strip() != "device":
+        raise Failure(f"{message.strip()}\n{HINT}")
+    return args
+
+
+def parse_apps(text):
+    """(package, label) pairs from `scrcpy --list-apps` output."""
+    lines = text.splitlines()
+    apps = []
+    for number, line in enumerate(lines):
+        match = APP.fullmatch(line)
+        if not match:
+            continue
+        following = lines[number + 1] if number + 1 < len(lines) else ""
+        if following.startswith(CONTINUATION) and PACKAGE.fullmatch(following[34:]):
+            label, package = match[1], following[34:]
+        else:
+            label, _, package = match[1].rpartition(" ")
+        if label.strip() and PACKAGE.fullmatch(package):
+            apps.append((package, label.strip()))
+    return apps
+
+
+def entry(package, label):
+    label = label.replace("\\", "\\\\")
+    return (
+        "[Desktop Entry]\nType=Application\n"
+        f"Name={label}\nComment=Android app\nIcon=phone\n"
+        f"Exec=moarchy-android-apps launch {package}\n"
+    )
+
+
+def sync(args):
+    result = run("scrcpy", *args, "--list-apps", timeout=120)
+    apps = [
+        (package, label)
+        for package, label in parse_apps(result.stdout + "\n" + result.stderr)
+        if not package.endswith(SKIPPED)
+    ]
+    if result.returncode or not apps:
+        output = (result.stderr or result.stdout).strip().splitlines()
+        raise Failure(output[-1] if output else "scrcpy listed no Android apps")
+    directory = path("XDG_DATA_HOME", "applications")
+    directory.mkdir(parents=True, exist_ok=True)
+    wanted = {f"{PREFIX}{package}.desktop": entry(package, label) for package, label in apps}
+    # Only entries this tool owns are ever removed.
+    for stale in directory.glob(f"{PREFIX}*.desktop"):
+        if stale.name not in wanted:
+            stale.unlink()
+    for name, text in wanted.items():
+        target = directory / name
+        # Unchanged files stay untouched so the launcher does not rescan.
+        if not target.is_file() or target.read_text(encoding="utf-8") != text:
+            staging = directory / f".{name}.new"
+            staging.write_text(text, encoding="utf-8")
+            staging.replace(target)
+    return f"{len(wanted)} Android apps in the launcher"
+
+
+def connect(endpoint):
+    args = device(endpoint)
+    state = path("XDG_STATE_HOME", "moarchy-android", "endpoint")
+    state.parent.mkdir(parents=True, exist_ok=True)
+    state.write_text(endpoint + "\n", encoding="utf-8")
+    return sync(args)
+
+
+def launch(package):
+    if not PACKAGE.fullmatch(package):
+        raise Failure(f"not an Android package name: {package}")
+    config = path("XDG_CONFIG_HOME", "moarchy-android", "scrcpy-args")
+    extra = shlex.split(config.read_text(encoding="utf-8")) if config.is_file() else []
+    args = device()
+    # Size the virtual display to the tile the window will fill; scrcpy scales
+    # Android's density to match, so apps keep the phone's layout.
+    display = "--new-display"
+    try:
+        workspaces = json.loads(run("swaymsg", "-t", "get_workspaces").stdout)
+        rect = next(item["rect"] for item in workspaces if item.get("focused"))
+        display += f"={rect['width']}x{rect['height']}"
+    except (Failure, ValueError, StopIteration, KeyError, TypeError):
+        pass
+    code = subprocess.call(
+        ["scrcpy", *args, display, f"--start-app={package}", *(extra or DEFAULT_ARGS)],
+        env=dict(os.environ, SDL_VIDEODRIVER="wayland"),
+    )
+    if code == 2:
+        raise Failure(f"Android disconnected.\n{HINT}")
+    if code:
+        raise Failure(
+            f"scrcpy exited with status {code}; "
+            "journalctl --user -u moarchy-android-session shows why"
+        )
+
+
+def notify(message, stream):
+    print(message, file=stream)
+    try:
+        subprocess.run(["notify-send", "Android apps", message], capture_output=True, timeout=5)
+    except (OSError, subprocess.SubprocessError):
+        pass
+
+
+def main(argv):
+    command, *rest = argv or [""]
+    try:
+        if command == "connect" and len(rest) == 1 and ENDPOINT.fullmatch(rest[0]):
+            message = connect(rest[0])
+        elif command == "sync" and not rest:
+            message = sync(device())
+        elif command == "launch" and len(rest) == 1:
+            launch(rest[0])
+            return 0
+        else:
+            sys.stderr.write(__doc__)
+            return 2
+    except Failure as error:
+        notify(str(error), sys.stderr)
+        return 1
+    notify(message, sys.stdout)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

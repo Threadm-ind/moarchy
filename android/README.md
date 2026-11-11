@@ -57,6 +57,49 @@ windows. Phone hardware controls remain in Android. With a hardware keyboard,
 Super+Return opens Terminal, Super+Space opens Apps, Super+T opens Themes,
 Super+I toggles the touch keyboard and Super+Shift+E closes the desktop.
 
+## Android apps in the desktop
+
+Android apps keep running on Android. Each one opens in its own window: the
+desktop asks Android for a separate virtual display, starts the app there, and
+streams it in with `scrcpy` over Wireless debugging. No root is needed.
+
+Pairing is a one-time step. On the phone, open Settings > System > Developer
+options > Wireless debugging and turn it on. Put Settings and Terminal in split
+screen, tap **Pair device with pairing code**, then in the Debian shell run:
+
+```sh
+adb pair PHONE_IP:PAIRING_PORT PAIRING_CODE
+```
+
+Start the desktop, open its Terminal and connect to the address shown at the
+top of the Wireless debugging screen. The port there differs from the pairing port:
+
+```sh
+moarchy-android-apps connect PHONE_IP:PORT
+```
+
+This remembers the address and adds every launchable Android app to the app
+drawer. Tap **Sync Android Apps** in the drawer after installing or removing
+apps on the phone. Android changes the Wireless debugging port after a reboot
+or when you toggle it off and on; run `connect` again with the new address.
+
+On GrapheneOS, Developer options exist only in the Owner profile, so pair and
+run Terminal there; the drawer lists Owner-profile apps only. Terminal needs its
+Network permission, which also guards connections to the phone itself. Auto
+reboot (after 18 locked hours by default) counts as a reboot: check Wireless
+debugging is on and run `connect` with the new port.
+
+Sound stays on the phone, and the Android keyboard opens inside the app window.
+To change the scrcpy flags, write them to
+`~/.local/share/moarchy-android/profile/app-config/moarchy-android/scrcpy-args`.
+That file replaces the defaults `--no-audio --display-ime-policy=local`, so keep
+those flags unless you mean to drop them. For example, `--max-fps=30` reduces
+CPU load.
+
+Wireless debugging lets this Debian guest control the phone as a debugger.
+Turn it off when you are not using Android apps here. Some banking apps refuse
+to open while Developer options are on.
+
 ## Stop, remove and troubleshoot
 
 ```sh

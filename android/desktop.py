@@ -77,6 +77,12 @@ def main():
             str(omarchy / "icon.png"),
             ["omarchy-shell", "themes", "open"],
         ),
+        (
+            "sync-android",
+            "Sync Android Apps",
+            "phone",
+            ["moarchy-android-apps", "sync"],
+        ),
     ]:
         (apps / f"moarchy-android-{slug}.desktop").write_text(
             f"[Desktop Entry]\nType=Application\nName={name}\nIcon={icon}\nExec={' '.join(command)}\n"
